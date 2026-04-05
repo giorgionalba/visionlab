@@ -1,4 +1,4 @@
-import React, {useState, useCallback} from 'react'
+import React, {useState, useCallback, useRef, useEffect} from 'react'
 import {useOutletContext} from "react-router";
 import {CheckCircle2, ImageIcon, UploadIcon} from "lucide-react";
 import {PROGRESS_INCREMENT, PROGRESS_INTERVAL_MS, REDIRECT_DELAY_MS} from "../lib/constants";
@@ -15,23 +15,58 @@ const Upload: React.FC<UploadProps> = ({ onComplete }) => {
     const [file, setFile] = useState<File | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [progress, setProgress] = useState(0);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const {isSignedIn} = useOutletContext<AuthContext>();
 
+    const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, []);
+
     const processFile = useCallback((selectedFile: File) => {
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+        const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
+        if (!validTypes.includes(selectedFile.type) || selectedFile.size > MAX_FILE_SIZE_BYTES) {
+            setFile(null);
+            setProgress(0);
+            setUploadError("Invalid file type or size.");
+            return;
+        }
+
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
         setFile(selectedFile);
         setProgress(0);
+        setUploadError(null);
 
         const reader = new FileReader();
+
+        reader.onerror = () => {
+            setUploadError("Failed to read the file.");
+            setFile(null);
+            setProgress(0);
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+
         reader.onloadend = () => {
+            if (reader.error) return; // handled by onerror
             const base64Data = reader.result as string;
 
             let currentProgress = 0;
-            const progressInterval = setInterval(() => {
+            intervalRef.current = setInterval(() => {
                 currentProgress += PROGRESS_INCREMENT;
                 if (currentProgress >= 100) {
                     currentProgress = 100;
-                    clearInterval(progressInterval);
-                    setTimeout(() => {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    timeoutRef.current = setTimeout(() => {
                         if (onComplete) onComplete(base64Data);
                     }, REDIRECT_DELAY_MS);
                 }
@@ -96,6 +131,7 @@ const Upload: React.FC<UploadProps> = ({ onComplete }) => {
                             ) : ("Sign in or sign up with Puter to upload")}
                         </p>
                         <p className="help"> Maximum file size 50 MB.</p>
+                        {uploadError && <p className="error" style={{color: 'red', marginTop: 10}}>{uploadError}</p>}
                     </div>
                 </div>
             ) : (
@@ -116,6 +152,7 @@ const Upload: React.FC<UploadProps> = ({ onComplete }) => {
                             <p className="status-text">
                                 {progress < 100 ? "Analyzing floor plan..." : "Upload complete!"}
                             </p>
+                            {uploadError && <p className="error" style={{color: 'red'}}>{uploadError}</p>}
                         </div>
                     </div>
 

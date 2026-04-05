@@ -16,10 +16,10 @@ export function meta({}: Route.MetaArgs) {
 export default function Home() {
     const navigate = useNavigate();
 
-    const handleUploadComplete = async(base64Image:string) => {
+    const handleUploadComplete = (base64Image:string) => {
         const newId = Date.now().toString();
+        localStorage.setItem(`visionlab_project_${newId}`, JSON.stringify({ id: newId, image: base64Image }));
         navigate(`/visualizer/${newId}`);
-        return true;
     }
   return (
       <div className="home">
